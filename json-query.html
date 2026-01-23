@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Query Engine & Parser</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- JSONPath Library -->
+    <script type="module">
+        import { JSONPathJS } from './node_modules/jsonpath-js/dist/index.mjs';
+        window.JSONPathJS = JSONPathJS;
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;600&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+
+        .code-font {
+            font-family: 'Fira Code', monospace;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        .input-area {
+            background: #1e293b;
+            border: 1px solid #334155;
+            transition: all 0.2s;
+        }
+        .input-area:focus-within {
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
+            transition: transform 0.1s;
+        }
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .example-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .example-card:hover {
+            border-color: #38bdf8;
+            background: #23304a;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="border-b border-slate-800 bg-slate-900 px-6 py-3 flex justify-between items-center shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-500 p-2 rounded-lg">
+                <i class="fas fa-microchip text-white text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight">JSON Query Engine</h1>
+                <p class="text-xs text-slate-400">Multi-Engine Parser & Transformer</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 bg-slate-800 rounded-lg p-1 border border-slate-700">
+                <span class="text-xs font-bold text-slate-500 px-2">ENGINE</span>
+                <select id="engine-selector" onchange="updateEngineUI()" class="bg-slate-900 text-sm font-semibold text-blue-400 outline-none rounded-md px-3 py-1 border border-slate-700 cursor-pointer">
+                    <option value="jsonpath" selected>JSONPath</option>
+                    <option value="js">JS (Standard)</option>
+                </select>
+            </div>
+            <button onclick="loadExample()" class="text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                <i class="fas fa-undo mr-2"></i>Reset Example
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex overflow-hidden p-4 gap-4">
+
+        <!-- Left Column: Input and Query -->
+        <div class="w-1/2 flex flex-col gap-4">
+            <div class="flex-1 flex flex-col min-h-0">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex justify-between">
+                    <span>Input JSON Data</span>
+                    <span id="json-status" class="text-emerald-400 font-bold">Valid</span>
+                </label>
+                <textarea id="json-input" spellcheck="false" class="input-area flex-1 rounded-xl p-4 code-font text-sm resize-none custom-scrollbar outline-none" placeholder="Paste your JSON here..."></textarea>
+            </div>
+
+            <div class="h-56 flex flex-col shrink-0">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex justify-between">
+                    <span id="query-label">Query Expression (JSONPath)</span>
+                    <span class="text-slate-600">Press Cmd/Ctrl + Enter</span>
+                </label>
+                <div class="relative flex-1">
+                    <textarea id="query-input" spellcheck="false" class="input-area w-full h-full rounded-xl p-4 code-font text-sm resize-none outline-none pr-24" placeholder="e.g. $..name"></textarea>
+                    <button onclick="runQuery()" class="absolute right-3 bottom-3 btn-primary px-4 py-2 rounded-lg text-sm font-bold text-white shadow-lg">
+                        RUN <i class="fas fa-play ml-2 text-xs"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Result & Example Panel -->
+        <div class="w-1/2 flex flex-col gap-4">
+            <!-- Result Panel -->
+            <div class="flex-[3] flex flex-col min-h-0">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex justify-between">
+                    <span>Query Result</span>
+                    <button onclick="copyResult()" class="hover:text-white transition-colors">
+                        <i class="fas fa-copy mr-1"></i> Copy
+                    </button>
+                </label>
+                <div id="result-output" class="input-area flex-1 rounded-xl p-4 code-font text-sm overflow-auto custom-scrollbar whitespace-pre text-slate-300">
+                    // Results will appear here...
+                </div>
+            </div>
+
+            <!-- Example Panel (Permanent) -->
+            <div class="flex-[2] flex flex-col min-h-0 border-t border-slate-800 pt-2">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                    <i class="fas fa-terminal mr-2"></i>Quick Examples (Click to apply)
+                </label>
+                <div id="examples-container" class="overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                    <!-- Examples generated by JS -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-6 py-3 rounded-full shadow-2xl font-medium opacity-0 transition-opacity pointer-events-none">
+        Copied to clipboard!
+    </div>
+
+    <script>
+        const jsonInput = document.getElementById('json-input');
+        const queryInput = document.getElementById('query-input');
+        const resultOutput = document.getElementById('result-output');
+        const jsonStatus = document.getElementById('json-status');
+        const engineSelector = document.getElementById('engine-selector');
+        const queryLabel = document.getElementById('query-label');
+        const examplesContainer = document.getElementById('examples-container');
+        const toast = document.getElementById('toast');
+
+        const EXAMPLES = {
+            js: [
+                { name: "Selection", desc: "Get all employee names", query: "departments.flatMap(d => d.employees).map(e => e.name)" },
+                { name: "Filtering", desc: "Salaries > 100k", query: "departments.flatMap(d => d.employees).filter(e => e.salary > 100000)" },
+                { name: "Counting", desc: "Total count of employees", query: "departments.reduce((total, d) => total + d.employees.length, 0)" }
+            ],
+            jsonpath: [
+                { name: "Selection", desc: "Get all employee names", query: "$..employees[*].name" },
+                { name: "Filtering", desc: "Salaries > 100k", query: "$..employees[?(@.salary > 100000)]" },
+                { name: "Counting", desc: "Total count of employees", query: "$..employees.length" }
+            ]
+        };
+
+        const INITIAL_JSON = {
+            company: "TechNova",
+            departments: [
+                {
+                    name: "Engineering",
+                    active: true,
+                    employees: [
+                        { id: 1, name: "Alice", salary: 95000, skills: ["React"] },
+                        { id: 2, name: "Bob", salary: 105000, skills: ["Node"] },
+                        { id: 3, name: "Charlie", salary: 110000, skills: ["React", "Node"] }
+                    ]
+                },
+                {
+                    name: "Marketing",
+                    active: false,
+                    employees: [
+                        { id: 4, name: "Diana", salary: 85000, skills: ["SEO"] }
+                    ]
+                }
+            ],
+            metrics: { uptime: 99.9, users: 5400 }
+        };
+
+        // Initialize App
+        window.onload = () => {
+            jsonInput.value = JSON.stringify(INITIAL_JSON, null, 4);
+            updateEngineUI();
+            runQuery();
+        };
+
+        // Input monitoring
+        jsonInput.addEventListener('input', () => {
+            try {
+                if(!jsonInput.value.trim()) {
+                    jsonStatus.textContent = "Empty";
+                    jsonStatus.className = "text-slate-500 font-bold";
+                    return;
+                }
+                JSON.parse(jsonInput.value);
+                jsonStatus.textContent = "Valid";
+                jsonStatus.className = "text-emerald-400 font-bold";
+            } catch (e) {
+                jsonStatus.textContent = "Invalid JSON";
+                jsonStatus.className = "text-rose-400 font-bold";
+            }
+        });
+
+        function updateEngineUI() {
+            const mode = engineSelector.value;
+            queryLabel.textContent = mode === 'js' ? "Query Expression (JS)" : "Query Expression (JSONPath)";
+            queryInput.placeholder = mode === 'js' ? "e.g. departments.map(d => d.name)" : "e.g. $..name";
+
+            // Re-render examples
+            examplesContainer.innerHTML = '';
+            EXAMPLES[mode].forEach(ex => {
+                const div = document.createElement('div');
+                div.className = 'example-card p-3 rounded-lg text-xs';
+                div.onclick = () => {
+                    queryInput.value = ex.query;
+                    runQuery();
+                };
+                div.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="font-bold text-blue-400">${ex.name}</span>
+                        <span class="text-slate-500">${ex.desc}</span>
+                    </div>
+                    <code class="text-slate-400 block truncate">${ex.query}</code>
+                `;
+                examplesContainer.appendChild(div);
+            });
+        }
+
+        function runQuery() {
+            const rawJson = jsonInput.value.trim();
+            const query = queryInput.value.trim();
+            const mode = engineSelector.value;
+
+            if (!rawJson) {
+                renderError("Please provide input JSON first.");
+                return;
+            }
+
+            try {
+                const data = JSON.parse(rawJson);
+                let result;
+
+                if (mode === 'js') {
+                    // JS Engine logic
+                    const executor = new Function('data', `
+                        try {
+                            with(data) {
+                                return ${query || 'data'};
+                            }
+                        } catch(err) {
+                            return "QUERY_ERROR: " + err.message;
+                        }
+                    `);
+                    result = executor(data);
+                } else {
+                    // JSONPath logic (using jsonpath-js)
+                    try {
+                        if (typeof window.JSONPathJS === 'undefined') {
+                            result = "QUERY_ERROR: JSONPath engine not yet loaded. Please wait a moment.";
+                        } else {
+                            const jp = new window.JSONPathJS(query || '$');
+                            result = jp.find(data);
+                        }
+                    } catch(err) {
+                        result = "QUERY_ERROR: " + err.message;
+                    }
+                }
+
+                if (typeof result === 'string' && result.startsWith("QUERY_ERROR: ")) {
+                    renderError(result.replace("QUERY_ERROR: ", ""));
+                } else {
+                    renderResult(result);
+                }
+
+            } catch (e) {
+                renderError("Invalid Input JSON: " + e.message);
+            }
+        }
+
+        function renderResult(obj) {
+            resultOutput.textContent = JSON.stringify(obj, null, 4);
+            resultOutput.classList.remove('text-rose-400');
+            resultOutput.classList.add('text-slate-300');
+        }
+
+        function renderError(msg) {
+            resultOutput.textContent = `Error: ${msg}`;
+            resultOutput.classList.remove('text-slate-300');
+            resultOutput.classList.add('text-rose-400');
+        }
+
+        function loadExample() {
+            jsonInput.value = JSON.stringify(INITIAL_JSON, null, 4);
+            const mode = engineSelector.value;
+            queryInput.value = EXAMPLES[mode][0].query;
+            jsonInput.dispatchEvent(new Event('input'));
+            runQuery();
+        }
+
+        function copyResult() {
+            const text = resultOutput.textContent;
+            if (!text || text.startsWith("//")) return;
+
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+
+            toast.style.opacity = "1";
+            setTimeout(() => { toast.style.opacity = "0"; }, 2000);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                runQuery();
+            }
+        });
+    </script>
+</body>
+</html>
